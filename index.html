@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <!-- Required meta tags-->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, minimal-ui, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- Color theme for statusbar -->
+    <meta name="theme-color" content="#2196f3">
+    <!-- Your app title -->
+    <title>在线客服</title>
+    <!-- Path to Framework7 Library CSS -->
+    <link rel="stylesheet" href="css/framework7.min.css">
+    <!-- Path to your custom app styles-->
+    <!-- <link rel="stylesheet" href="path/to/my-app.css"> -->
+</head>
+
+<body>
+    <!-- App root element -->
+    <div id="app">
+        <div class="page">
+            <div class="navbar">
+                <div class="navbar-inner">
+                    <div class="title">在线客服</div>
+                </div>
+            </div>
+            <div class="toolbar messagebar">
+                <div class="toolbar-inner">
+                    <div class="messagebar-area">
+                        <textarea class="resizable" placeholder=""></textarea>
+                    </div>
+                    <a class="link send-link" href="#">&nbsp;&nbsp;发送&nbsp;&nbsp;</a>
+                </div>
+            </div>
+            <div class="page-content messages-content">
+                <div class="messages">
+
+                    <!-- Messages -->
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- Path to Framework7 Library JS-->
+    <script type="text/javascript" src="js/framework7.min.js"></script>
+    <!-- Path to your app js-->
+    <!-- <script type="text/javascript" src="path/to/my-app.js"></script> -->
+    <script type="text/javascript" src="js/jquery-3.3.1.js"></script>
+
+
+    <script>
+        var app = new Framework7();
+
+        var $$ = Dom7;
+
+        // Init Messages
+        var messages = app.messages.create({
+            el: '.messages',
+
+            scrollMessages: true,
+            scrollMessagesOnEdge: true,
+
+            // First message rule
+            firstMessageRule: function (message, previousMessage, nextMessage) {
+                // Skip if title
+                if (message.isTitle) return false;
+                /* if:
+                  - there is no previous message
+                  - or previous message type (send/received) is different
+                  - or previous message sender name is different
+                */
+                if (!previousMessage || previousMessage.type !== message.type || previousMessage.name !== message.name) return true;
+                return false;
+            },
+            // Last message rule
+            lastMessageRule: function (message, previousMessage, nextMessage) {
+                // Skip if title
+                if (message.isTitle) return false;
+                /* if:
+                  - there is no next message
+                  - or next message type (send/received) is different
+                  - or next message sender name is different
+                */
+                if (!nextMessage || nextMessage.type !== message.type || nextMessage.name !== message.name) return true;
+                return false;
+            },
+            // Last message rule
+            tailMessageRule: function (message, previousMessage, nextMessage) {
+                // Skip if title
+                if (message.isTitle) return false;
+                /* if (bascially same as lastMessageRule):
+                - there is no next message
+                - or next message type (send/received) is different
+                - or next message sender name is different
+              */
+                if (!nextMessage || nextMessage.type !== message.type || nextMessage.name !== message.name) return true;
+                return false;
+            }
+        });
+
+        // Init Messagebar
+        var messagebar = app.messagebar.create({
+            el: '.messagebar'
+        });
+
+        // 最后消息时间
+        var LastMessageTime = "";
+
+        // 客户端用户Id，仅第一次建立会话时使用
+        var userId = "";
+        var appId = 1;
+        var appName = "ios";
+        var toUserId = "";
+
+        // IM用户Id
+        var accountId = "";
+
+        // 会话Id
+        var chatId = "";
+
+        var sending = false;
+
+        var appPath = "http://kf.api.sc9188.com/api/services/app";
+
+        // Send Message
+        $$('.send-link').on('click', function () {
+
+            var text = messagebar.getValue().replace(/\n/g, '<br>').trim();
+            console.log(text);
+            // return if empty message
+            if (!text.length) return;
+
+            $('.send-link').addClass("disabled");
+            sending = true;
+
+            sendMessage(text, function (data) {
+                // Clear area
+                messagebar.clear();
+
+                // Return focus to area
+                messagebar.focus();
+
+                // Add message to messages
+                messages.addMessage({
+                    text: data.content,
+                    header: data.creationTime,//"2018年10月4日19点35分",
+                    // footer:"footer",
+                    // name:"我",
+                    avatar: "img/7.jpg",
+                    // type:"sent",
+                    // textHeader:"textHeader",
+                    // textFooter:"textFooter",
+                    // image:"image",
+                    // imageSrc:"imageSrc",
+                    // isTitle:"isTitle",
+                });
+
+                // LastMessageTime = data.creationTime;
+                // console.log("最后时间：" + LastMessageTime);
+
+            })
+
+            return;
+        });
+
+        function sendMessage(text, callback) {
+            var mes = {
+                Content: text,
+                AccountId: accountId,
+                ChatId: chatId,
+                AppId: appId,
+                AppName:appName
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: appPath + '/Message/create',
+                contentType: "application/json; charset=utf-8",
+                data: JSON.stringify(mes),
+                dataType: "json",
+                success: function (data) {
+                    callback(data.result)
+                }
+            }).done(function () {
+                $('.send-link').removeClass("disabled");
+                sending = false;
+            });
+
+
+        }
+
+        function getMessage(im_url, callback) {
+            var d = {
+                AccountId: accountId,
+                ChatId: chatId,
+                LastMessageTime: LastMessageTime,
+            };
+            $.ajax({
+                url: appPath + '/Message/' + im_url,
+                data: d,
+                type: "get",
+                success: function (data) {
+                    callback(data);
+                }
+            })
+        }
+
+        function getMessageInitial() {
+            getMessage('GetInitial', function (data) {
+                if (data.result.length > 0) {
+                    var mss = [];
+                    data.result.forEach(element => {
+                        mss.push({
+                            text: element.content,
+                            type: element.accountId == accountId ? 'sent' : 'received',
+                            header: element.creationTime,//"2018年10月4日19点35分",
+                            avatar: "img/9.jpg"
+                        });
+                        LastMessageTime = element.creationTime;
+                    });
+                    console.log("最后时间：" + LastMessageTime);
+                    messages.messages = mss;
+                    messages.renderMessages();
+                    messages.layout();
+                    $$(".page-content").scrollTop(10000);
+                }
+            });
+        }
+
+        function getMessageTimer() {
+            getMessage('Get', function (data) {
+                if (data.result.length > 0) {
+                    data.result.forEach(element => {
+                        messages.addMessage({
+                            text: element.content,
+                            type: element.accountId == accountId ? 'sent' : 'received',
+                            header: element.creationTime,//"2018年10月4日19点35分",
+                            avatar: "img/9.jpg"
+                        });
+                        LastMessageTime = element.creationTime;
+                    });
+                    console.log("最后时间：" + LastMessageTime);
+                }
+            });
+        }
+
+        function getParameterByName(name, url) {
+            if (!url) url = window.location.href;
+            name = name.replace(/[\[\]]/g, '\\$&');
+            var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)', 'i'),
+                results = regex.exec(url);
+            if (!results) return null;
+            if (!results[2]) return '';
+            return decodeURIComponent(results[2].replace(/\+/g, ' '));
+        }
+
+        function getChat(callback) {
+            var d = {
+                UserId: userId,
+                ToUserId: toUserId
+            }
+
+            $.ajax({
+                type: "post",
+                url: appPath + '/Message/CreateChat',
+                contentType: "application/json; charset=utf-8",
+                data: JSON.stringify(d),
+                dataType: "json",
+                success: function (data) {
+                    callback(data.result)
+                }
+            })
+        }
+
+        $(function () {
+
+            // 建立对话
+            userId = getParameterByName("userId") || null;
+            appId = getParameterByName("appId")|| 1;
+            appName = getParameterByName("appName")||"ios";
+            toUserId = getParameterByName("toUserId") || null;
+
+            // 拥有accountId和chatId，直接对话
+            accountId = getParameterByName("accountId") || null;
+            chatId = getParameterByName("chatId") || null;
+
+            LastMessageTime = "2000-01-01 00:00:00";
+
+            if (chatId) {
+                getMessageInitial();
+                setInterval(getMessageTimer, 5 * 1000);
+            } else {
+                getChat(function (data) {
+                    console.log(data);
+                    chatId = data.chatId;
+                    accountId = data.accountId;
+                    getMessageInitial();
+                    setInterval(getMessageTimer, 5 * 1000);
+                });
+            }
+
+            $(document).keypress(function (e) {
+                if (e.which == 13) {
+                    if (!sending) {
+                        $$('.send-link').click();
+                    }
+                    return false;
+                }
+            });
+        });
+
+    </script>
+</body>
+
+</html>
